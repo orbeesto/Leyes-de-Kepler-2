@@ -3,29 +3,30 @@ import numpy as np
 import plotly.graph_objects as go
 import time
 
-st.set_page_config(page_title="Simulador Marte: Sentido Real", layout="wide")
+st.set_page_config(page_title="Simulador Marte: Órbita Continua", layout="wide")
 
-st.title("🔭 Sincronía Orbital: Tierra y Marte")
-st.write("Simulación corregida: Ambos planetas orbitan en sentido antihorario (visto desde el polo norte eclíptico).")
+st.title("🔭 Órbita Continua: Tierra y Marte")
+st.write("Animación suavizada con intervalos de tiempo reducidos para mayor realismo.")
 
+# --- 1. ESTADO DE SESIÓN ---
 if 'dias' not in st.session_state:
-    st.session_state.dias = 0
+    st.session_state.dias = 0.0
 if 'ejecutando' not in st.session_state:
     st.session_state.ejecutando = False
 
-# --- CONTROLES ---
+# --- 2. CONTROLES ---
 col1, col2, col3, _ = st.columns([1, 1, 1, 4])
 with col1:
-    if st.button("▶️ Iniciar"): st.session_state.ejecutando = True
+    if st.button("▶️ Inicio"): st.session_state.ejecutando = True
 with col2:
-    if st.button("⏸️ Pausar"): st.session_state.ejecutando = False
+    if st.button("⏸️ Pausa"): st.session_state.ejecutando = False
 with col3:
     if st.button("🔄 Reinicio"):
-        st.session_state.dias = 0
+        st.session_state.dias = 0.0
         st.session_state.ejecutando = False
         st.rerun()
 
-# --- DATOS TÉCNICOS ---
+# --- 3. DATOS TÉCNICOS ---
 planets = {
     'Tierra': {'a': 1.0, 'e': 0.0167, 'i': 0.0, 'Omega': 0.0, 'w': 102.9, 'n': 0.9856, 'color': '#00BFFF'},
     'Marte': {'a': 1.523, 'e': 0.0934, 'i': 1.85, 'Omega': 49.5, 'w': 286.5, 'n': 0.5240, 'color': '#FF4500'}
@@ -33,73 +34,66 @@ planets = {
 
 def solve_kepler(M, e):
     E = M
-    for _ in range(10):
+    for _ in range(6): # Reducido a 6 iteraciones para velocidad; suficiente precisión visual
         E = E - (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
     return E
 
 def get_3d_pos(p_name, t):
     p = planets[p_name]
     a, e, i, Om, w = p['a'], p['e'], np.radians(p['i']), np.radians(p['Omega']), np.radians(p['w'])
-    
-    # M aumenta con t, asegurando sentido antihorario
-    M = np.radians(p['n'] * t) 
+    M = np.radians(p['n'] * t)
     E = solve_kepler(M, e)
     
-    # Posición en el plano de la elipse
-    x_elipse = a * (np.cos(E) - e)
-    y_elipse = a * (np.sqrt(1 - e**2) * np.sin(E))
+    # Ecuaciones de posición estándar
+    x_e = a * (np.cos(E) - e)
+    y_e = a * (np.sqrt(1 - e**2) * np.sin(E))
     
-    # Aplicación de las rotaciones de Euler para llevar al espacio 3D (Eclíptica)
-    # Esta es la parte crítica para que el sentido sea el correcto en los 3 ejes
-    X = (np.cos(Om) * np.cos(w + E) - np.sin(Om) * np.sin(w + E) * np.cos(i)) * a * (1 - e * np.cos(E))
-    Y = (np.sin(Om) * np.cos(w + E) + np.cos(Om) * np.sin(w + E) * np.cos(i)) * a * (1 - e * np.cos(E))
-    Z = (np.sin(w + E) * np.sin(i)) * a * (1 - e * np.cos(E))
-    
+    # Rotaciones 3D
+    X = (np.cos(Om)*np.cos(w+E) - np.sin(Om)*np.sin(w+E)*np.cos(i)) * a*(1-e*np.cos(E))
+    Y = (np.sin(Om)*np.cos(w+E) + np.cos(Om)*np.sin(w+E)*np.cos(i)) * a*(1-e*np.cos(E))
+    Z = (np.sin(w+E)*np.sin(i)) * a*(1-e*np.cos(E))
     return X, Y, Z
 
+# --- 4. RENDERIZADO OPTIMIZADO ---
 def crear_figura(t_actual):
     fig = go.Figure()
-    
-    # El Sol
     fig.add_trace(go.Scatter3d(x=[0], y=[0], z=[0], mode='markers', 
-                               marker=dict(size=14, color='yellow', symbol='diamond'), name="Sol"))
+                               marker=dict(size=12, color='yellow'), name="Sol"))
 
     for name, data in planets.items():
-        # Órbita
-        orbit_days = np.linspace(0, 700, 400)
+        # Órbita con menos puntos para ganar FPS
+        orbit_days = np.linspace(0, 687 if name=='Marte' else 365, 150)
         pts = np.array([get_3d_pos(name, d) for d in orbit_days])
         fig.add_trace(go.Scatter3d(x=pts[:,0], y=pts[:,1], z=pts[:,2], 
-                                   mode='lines', line=dict(color=data['color'], width=4), name=f"Órbita {name}"))
+                                   mode='lines', line=dict(color=data['color'], width=3), 
+                                   hoverinfo='none', showlegend=True, name=name))
         
         # Planeta
         px, py, pz = get_3d_pos(name, t_actual)
         fig.add_trace(go.Scatter3d(x=[px], y=[py], z=[pz], mode='markers', 
-                                   marker=dict(size=12, color=data['color']), name=name))
+                                   marker=dict(size=10, color=data['color']), showlegend=False))
 
     fig.update_layout(
-        scene=dict(
-            aspectmode='data', bgcolor="black",
-            xaxis=dict(range=[-2, 2], title="X (UA)"),
-            yaxis=dict(range=[-2, 2], title="Y (UA)"),
-            zaxis=dict(range=[-0.5, 0.5], title="Z (UA)"),
-            camera=dict(eye=dict(x=0, y=0, z=2.5)) # Vista cenital para confirmar sentido
-        ),
-        paper_bgcolor="black", font=dict(color="white"),
-        legend=dict(font=dict(size=16), bgcolor="rgba(0,0,0,0.5)")
+        scene=dict(aspectmode='data', bgcolor="black",
+                   xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+                   camera=dict(eye=dict(x=1.3, y=1.3, z=1.3))),
+        paper_bgcolor="black", margin=dict(l=0, r=0, b=0, t=0), showlegend=True,
+        legend=dict(font=dict(color="white", size=14))
     )
     return fig
 
-# --- BUCLE DE ANIMACIÓN ---
+# --- 5. BUCLE DE ALTA VELOCIDAD ---
 placeholder = st.empty()
 
 if st.session_state.ejecutando:
     while st.session_state.ejecutando:
-        st.session_state.dias += 2 # Velocidad moderada
+        st.session_state.dias += 0.8  # Paso de tiempo pequeño = Movimiento suave
         fig = crear_figura(st.session_state.dias)
-        placeholder.plotly_chart(fig, use_container_width=True)
-        time.sleep(0.05)
+        # El parámetro 'config' ayuda a desactivar barras de herramientas pesadas
+        placeholder.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        time.sleep(0.01) # Pausa mínima para fluidez
 else:
     fig = crear_figura(st.session_state.dias)
     placeholder.plotly_chart(fig, use_container_width=True)
 
-st.write(f"📅 Tiempo: {int(st.session_state.dias)} días")
+st.write(f"⏱️ Tiempo transcurrido: {int(st.session_state.dias)} días")
