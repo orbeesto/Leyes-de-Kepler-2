@@ -1,0 +1,60 @@
+app.py
+import streamlit as st
+import numpy as np
+import plotly.graph_objects as go
+
+st.set_page_config(page_title="Simulador Marte-Tierra", layout="wide")
+
+st.title("🔭 Simulador Astronómico Profesional: Tierra y Marte")
+st.write("Visualización en 3D basada en elementos orbitales J2000.")
+
+# --- DATOS TÉCNICOS ---
+planets = {
+    'Tierra': {'a': 1.00000011, 'e': 0.01671022, 'i': 0.0, 'Omega': -11.26, 'w': 102.94, 'n': 0.9856, 'color': 'blue'},
+    'Marte': {'a': 1.52366231, 'e': 0.09341233, 'i': 1.85, 'Omega': 49.57, 'w': 286.46, 'n': 0.5240, 'color': 'red'}
+}
+
+def solve_kepler(M, e):
+    E = M
+    for _ in range(10):
+        E = E - (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
+    return E
+
+def get_3d_pos(p_name, days):
+    p = planets[p_name]
+    a, e, i, Om, w = p['a'], p['e'], np.radians(p['i']), np.radians(p['Omega']), np.radians(p['w'])
+    M = np.radians(p['n'] * days)
+    E = solve_kepler(M, e)
+    
+    # Plano orbital
+    x_o = a * (np.cos(E) - e)
+    y_o = a * (np.sqrt(1 - e**2) * np.sin(E))
+    
+    # Transformación a coordenadas eclípticas (3D)
+    X = x_o*(np.cos(Om)*np.cos(w) - np.sin(Om)*np.sin(w)*np.cos(i)) - y_o*(np.cos(Om)*np.sin(w) + np.sin(Om)*np.cos(w)*np.cos(i))
+    Y = x_o*(np.sin(Om)*np.cos(w) + np.cos(Om)*np.sin(w)*np.cos(i)) + y_o*(np.sin(Om)*np.sin(w) - np.cos(Om)*np.cos(w)*np.cos(i))
+    Z = x_o*(np.sin(w)*np.sin(i)) + y_o*(np.cos(w)*np.sin(i))
+    return X, Y, Z
+
+# --- INTERFAZ ---
+dias = st.slider("Días desde el inicio de la simulación", 0, 1000, 0)
+
+fig = go.Figure()
+
+# Dibujar Sol
+fig.add_trace(go.Scatter3d(x=[0], y=[0], z=[0], mode='markers', marker=dict(size=10, color='yellow'), name="Sol"))
+
+for name, data in planets.items():
+    # Trayectoria completa
+    orbit_days = np.linspace(0, 365 if name=='Tierra' else 687, 200)
+    pts = np.array([get_3d_pos(name, d) for d in orbit_days])
+    fig.add_trace(go.Scatter3d(x=pts[:,0], y=pts[:,1], z=pts[:,2], mode='lines', line=dict(color=data['color'], width=2), name=f"Órbita {name}"))
+    
+    # Posición actual
+    cx, cy, cz = get_3d_pos(name, dias)
+    fig.add_trace(go.Scatter3d(x=[cx], y=[cy], z=[cz], mode='markers', marker=dict(size=6, color=data['color']), name=name))
+
+fig.update_layout(scene=dict(bgcolor="black", xaxis_title="X (UA)", yaxis_title="Y (UA)", zaxis_title="Z (UA)"),
+                  margin=dict(l=0, r=0, b=0, t=0))
+
+st.plotly_chart(fig, use_container_width=True)
