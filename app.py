@@ -70,4 +70,19 @@ fig.update_layout(
         aspectmode='data',
         bgcolor="black",
         xaxis=dict(title=dict(text="X (UA)", font=dict(size=18, color="yellow"))),
-        yaxis=dict(title=dict(text="Y (UA)", font=dict(size=1
+        yaxis=dict(title=dict(text="Y (UA)", font=dict(size=18, color="yellow"))),
+        zaxis=dict(title=dict(text="Z (UA)", font=dict(size=18, color="yellow")))
+    ),
+    paper_bgcolor="black",
+    # Estilo de la Leyenda
+    legend=dict(
+        font=dict(size=20, color="white"), # Letras mucho más grandes
+        bgcolor="rgba(50, 50, 50, 0.7)",   # Fondo oscuro pero visible para resaltar el texto
+        bordercolor="white",
+        borderwidth=2,
+        itemsizing='constant' # Hace que los iconos de la leyenda sean grandes y claros
+    ),
+    margin=dict(l=0, r=0, b=0, t=50)
+)
+
+st.plotly_chart(fig, use_container_width=True)
